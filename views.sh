@@ -699,10 +699,17 @@ if [ $? -eq 0 ] && [ -f "$OUT_VIDEO" ]; then
   echo "============================================" >&2
   echo "SUCCESS: Video created at $OUT_VIDEO" >&2
   echo "============================================" >&2
+
+  # Clean up temporary files
+  echo "Cleaning up temporary files..." >&2
+  rm -f "$TMP_FRAME" "$SCREENSHOT_PNG" "$CAPTION_PNG" 2>/dev/null
+  echo "Cleanup complete." >&2
+
   # print ONLY basename to stdout (for automation)
   basename "$OUT_VIDEO"
   exit 0
 else
   echo "ERR: final ffmpeg compose failed" >&2
+  echo "Temporary files kept in $TEMP_DIR for debugging" >&2
   exit 1
 fi
