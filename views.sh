@@ -117,12 +117,15 @@ EOF
 # DEFAULT CONFIGURATION - All variables with their default values
 # ============================================================================
 
-# Directory defaults
-ASSETS_DIR="/files/extra"
-INPUT_BASE="/files"
-OUTPUT_DIR=""
+# Get script directory for relative paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Font configuration
+# Directory defaults (relative to script location)
+ASSETS_DIR="${SCRIPT_DIR}/assets"
+INPUT_BASE="${SCRIPT_DIR}/input"
+OUTPUT_DIR="${SCRIPT_DIR}/output"
+
+# Font configuration (try multiple fonts in assets/fonts)
 FONT_FILE="ARIALBD 1.TTF"
 
 # View count overlay defaults
@@ -346,13 +349,30 @@ fi
 # DERIVED PATHS AND SETUP
 # ============================================================================
 
-mkdir -p "$ASSETS_DIR"
-FONT="${ASSETS_DIR}/${FONT_FILE}"
-EYE_ICON="${ASSETS_DIR}/eye.png"
-EMOJI_PNG="${ASSETS_DIR}/emoji.png"
-SCREENSHOT_PNG="${ASSETS_DIR}/frame_with_views.png"
-TMP_FRAME="${ASSETS_DIR}/_tmp_frame.png"
-CAPTION_PNG="${ASSETS_DIR}/caption_canvas.png"
+# Create necessary directories
+mkdir -p "$ASSETS_DIR" "$ASSETS_DIR/fonts" "$ASSETS_DIR/icons" "$OUTPUT_DIR" "$INPUT_BASE" "${SCRIPT_DIR}/temp"
+
+# Font path (check both assets root and assets/fonts)
+if [ -f "${ASSETS_DIR}/fonts/${FONT_FILE}" ]; then
+  FONT="${ASSETS_DIR}/fonts/${FONT_FILE}"
+elif [ -f "${ASSETS_DIR}/${FONT_FILE}" ]; then
+  FONT="${ASSETS_DIR}/${FONT_FILE}"
+else
+  FONT="${ASSETS_DIR}/fonts/${FONT_FILE}"
+fi
+
+# Icon paths
+EYE_ICON="${ASSETS_DIR}/icons/eye.png"
+[ ! -f "$EYE_ICON" ] && EYE_ICON="${ASSETS_DIR}/eye.png"
+
+EMOJI_PNG="${ASSETS_DIR}/icons/emoji.png"
+[ ! -f "$EMOJI_PNG" ] && EMOJI_PNG="${ASSETS_DIR}/emoji.png"
+
+# Temp file paths (stored in temp directory)
+TEMP_DIR="${SCRIPT_DIR}/temp"
+SCREENSHOT_PNG="${TEMP_DIR}/frame_with_views.png"
+TMP_FRAME="${TEMP_DIR}/_tmp_frame.png"
+CAPTION_PNG="${TEMP_DIR}/caption_canvas.png"
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -374,8 +394,13 @@ pct_to_px() {
   fi
 }
 
-# Generate random view count
-VIEWS="$(shuf -i${RAND_MIN}-${RAND_MAX} -n1)M"
+# Generate random view count (cross-platform compatible)
+if command -v shuf >/dev/null 2>&1; then
+  VIEWS="$(shuf -i${RAND_MIN}-${RAND_MAX} -n1)M"
+else
+  # macOS fallback using jot
+  VIEWS="$(jot -r 1 ${RAND_MIN} ${RAND_MAX})M"
+fi
 
 # ============================================================================
 # LOGGING AND VALIDATION
@@ -498,8 +523,15 @@ try:
 except Exception as e:
     sys.stderr.write(f"Warning: Could not load eye icon: {e}\n")
 
+# Get script directory for font search
+script_dir = os.path.dirname(os.path.abspath(os.environ.get("FONT", "")))
+assets_dir = os.path.dirname(script_dir) if script_dir else ""
+
 candidates = [
     fontpath,
+    os.path.join(assets_dir, "fonts", "ARIALBD 1.TTF"),
+    os.path.join(assets_dir, "fonts", "Arial.ttf"),
+    os.path.join(assets_dir, "fonts", "DejaVuSans-Bold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/Library/Fonts/Arial.ttf",
@@ -551,8 +583,15 @@ fontsize = int(os.environ.get("CAPTION_FONT_SIZE", "64"))
 bar_opacity = int(os.environ.get("BAR_BG_OPACITY", "80"))
 fontpath = os.environ.get("FONT", "")
 
+# Get script directory for font search
+script_dir = os.path.dirname(os.path.abspath(fontpath)) if fontpath else ""
+assets_dir = os.path.dirname(script_dir) if script_dir else ""
+
 candidates = [
     fontpath,
+    os.path.join(assets_dir, "fonts", "ARIALBD 1.TTF"),
+    os.path.join(assets_dir, "fonts", "Arial.ttf"),
+    os.path.join(assets_dir, "fonts", "DejaVuSans-Bold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/Library/Fonts/Arial.ttf",
