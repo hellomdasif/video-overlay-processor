@@ -103,6 +103,15 @@ chmod +x views.sh
 
 # Make screenshot bigger (50% width, 40% height)
 ./views.sh --overlay-width 50% --overlay-height 40% input.mp4 output.mp4
+
+# Only caption overlay (no screenshot, no emoji)
+./views.sh --no-screenshot --no-emoji input.mp4 output.mp4
+
+# Only screenshot overlay (no caption, no emoji)
+./views.sh --no-caption --no-emoji input.mp4 output.mp4
+
+# No overlays at all (just re-encode)
+./views.sh --no-screenshot --no-caption --no-emoji input.mp4 output.mp4
 ```
 
 ## Complete Usage Guide
@@ -126,13 +135,34 @@ chmod +x views.sh
 
 ### All Available Options
 
+#### Toggle Options (Enable/Disable Overlays)
+
+| Option | Description | Effect |
+|--------|-------------|--------|
+| `--no-screenshot` | Disable screenshot overlay | Removes view count thumbnail |
+| `--no-caption` | Disable caption bar overlay | Removes bottom caption text |
+| `--no-emoji` | Disable emoji overlay | Removes emoji graphic |
+| `--overlay-only` | Caption + emoji only (no screenshot) | Same as `--no-screenshot` |
+
+**Examples:**
+```bash
+# Only caption overlay
+./views.sh --no-screenshot --no-emoji input.mp4 output.mp4
+
+# Only screenshot overlay
+./views.sh --no-caption --no-emoji input.mp4 output.mp4
+
+# No overlays (just re-encode)
+./views.sh --no-screenshot --no-caption --no-emoji input.mp4 output.mp4
+```
+
 #### Directory Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--assets-dir DIR` | Assets folder (font, icons, temp files) | `/files/extra` |
-| `--input-base DIR` | Base folder for relative inputs | `/files` |
-| `--output-dir DIR` | Output folder when OUT is basename | (none) |
+| `--assets-dir DIR` | Assets folder (font, icons, temp files) | `./assets` |
+| `--input-base DIR` | Base folder for relative inputs | `./input` |
+| `--output-dir DIR` | Output folder when OUT is basename | `./output` |
 
 #### View Count Overlay Options
 
@@ -460,6 +490,8 @@ The script follows a 4-stage pipeline:
 - **Preset**: veryfast (good balance of speed and quality)
 - **Audio**: Copy (preserves original audio)
 - **Frame Rate**: 30fps (default, configurable)
+- **Output Path**: Prints complete file path (e.g., `/path/to/output.mp4`)
+- **Temp Files**: Automatically cleaned up after successful processing
 
 ## Performance
 

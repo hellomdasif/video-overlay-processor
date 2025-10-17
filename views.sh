@@ -26,6 +26,12 @@ Directory Options:
   --output-dir DIR       : Optional target folder for outputs when OUT is a basename
                            Default: (none)
 
+Toggle Options:
+  --no-screenshot        : Disable screenshot overlay (view count thumbnail)
+  --no-caption           : Disable caption bar overlay
+  --no-emoji             : Disable emoji overlay
+  --overlay-only         : Only apply overlays without screenshot (caption + emoji only)
+
 View Count Overlay Options:
   --placement POS        : Screenshot position (top-right|top-left|bottom-right|bottom-left)
                            Default: top-right
@@ -164,6 +170,11 @@ FRAME_DELAY_START=0
 FPS=30
 DURATION_FALLBACK=600
 
+# Toggle defaults (enable all by default)
+ENABLE_SCREENSHOT=true
+ENABLE_CAPTION=true
+ENABLE_EMOJI=true
+
 # ============================================================================
 # ARGUMENT PARSING
 # ============================================================================
@@ -184,6 +195,20 @@ while [ $# -gt 0 ]; do
     # Font options
     --font-file)
       shift; FONT_FILE="${1:-}"
+      ;;
+
+    # Toggle options
+    --no-screenshot)
+      ENABLE_SCREENSHOT=false
+      ;;
+    --no-caption)
+      ENABLE_CAPTION=false
+      ;;
+    --no-emoji)
+      ENABLE_EMOJI=false
+      ;;
+    --overlay-only)
+      ENABLE_SCREENSHOT=false
       ;;
 
     # View count overlay options
@@ -636,6 +661,7 @@ chmod 644 "$CAPTION_PNG"
 # ============================================================================
 
 echo "4/4: Composing final video -> $OUT_VIDEO" >&2
+echo "Enabled overlays: Screenshot=$ENABLE_SCREENSHOT, Caption=$ENABLE_CAPTION, Emoji=$ENABLE_EMOJI" >&2
 
 # Compute overlay pixel sizes (OVERLAY_W / OVERLAY_H may be percent)
 OVERLAY_W_PX=$(pct_to_px "${OVERLAY_W}" "$VID_W")
@@ -673,40 +699,61 @@ case "$PLACEMENT" in
     ;;
 esac
 
-if [ -f "${EMOJI_PNG}" ]; then
-  echo "Using emoji overlay from: ${EMOJI_PNG}" >&2
-  ffmpeg -y -i "$INPUT_FILE" -i "$SCREENSHOT_PNG" -i "$CAPTION_PNG" -i "${EMOJI_PNG}" \
-    -t "${DURATION_FALLBACK}" \
-    -filter_complex "\
-[1:v]scale=${OVERLAY_W_PX}:${OVERLAY_H_PX}[ov]; \
-[0:v][ov]overlay=x=${OV_X_EXPR}:y=${OV_Y_EXPR}:enable='gte(t,${FRAME_DELAY_START})'[step1]; \
-[step1][2:v]overlay=x=(main_w-overlay_w)/2:y=${BAR_OFFSET_Y}[step2]; \
-[3:v]scale=${EMOJI_SIZE}:${EMOJI_SIZE}[emoji]; \
-[step2][emoji]overlay=x=${EMOJI_OFFSET_X}:y=${EMOJI_OFFSET_Y}" \
-    -r ${FPS} -c:v libx264 -preset veryfast -c:a copy "$OUT_VIDEO" 2>&1 | grep -v "^frame=" || true
+# Build ffmpeg command dynamically based on enabled overlays
+FFMPEG_INPUTS="-i \"$INPUT_FILE\""
+FILTER_COMPLEX=""
+CURRENT_STREAM="0:v"
+INPUT_INDEX=1
+
+# Add screenshot overlay if enabled
+if [ "$ENABLE_SCREENSHOT" = "true" ]; then
+  FFMPEG_INPUTS="$FFMPEG_INPUTS -i \"$SCREENSHOT_PNG\""
+  FILTER_COMPLEX="[${INPUT_INDEX}:v]scale=${OVERLAY_W_PX}:${OVERLAY_H_PX}[ov]; "
+  FILTER_COMPLEX="${FILTER_COMPLEX}[${CURRENT_STREAM}][ov]overlay=x=${OV_X_EXPR}:y=${OV_Y_EXPR}:enable='gte(t,${FRAME_DELAY_START})'[step${INPUT_INDEX}]; "
+  CURRENT_STREAM="step${INPUT_INDEX}"
+  INPUT_INDEX=$((INPUT_INDEX + 1))
+  echo "Adding screenshot overlay" >&2
+fi
+
+# Add caption overlay if enabled
+if [ "$ENABLE_CAPTION" = "true" ]; then
+  FFMPEG_INPUTS="$FFMPEG_INPUTS -i \"$CAPTION_PNG\""
+  FILTER_COMPLEX="${FILTER_COMPLEX}[${CURRENT_STREAM}][${INPUT_INDEX}:v]overlay=x=(main_w-overlay_w)/2:y=${BAR_OFFSET_Y}[step${INPUT_INDEX}]; "
+  CURRENT_STREAM="step${INPUT_INDEX}"
+  INPUT_INDEX=$((INPUT_INDEX + 1))
+  echo "Adding caption overlay" >&2
+fi
+
+# Add emoji overlay if enabled and file exists
+if [ "$ENABLE_EMOJI" = "true" ] && [ -f "${EMOJI_PNG}" ]; then
+  FFMPEG_INPUTS="$FFMPEG_INPUTS -i \"${EMOJI_PNG}\""
+  FILTER_COMPLEX="${FILTER_COMPLEX}[${INPUT_INDEX}:v]scale=${EMOJI_SIZE}:${EMOJI_SIZE}[emoji]; "
+  FILTER_COMPLEX="${FILTER_COMPLEX}[${CURRENT_STREAM}][emoji]overlay=x=${EMOJI_OFFSET_X}:y=${EMOJI_OFFSET_Y}[step${INPUT_INDEX}]; "
+  CURRENT_STREAM="step${INPUT_INDEX}"
+  INPUT_INDEX=$((INPUT_INDEX + 1))
+  echo "Adding emoji overlay" >&2
+elif [ "$ENABLE_EMOJI" = "true" ]; then
+  echo "Emoji overlay requested but ${EMOJI_PNG} not found, skipping" >&2
+fi
+
+# Remove trailing semicolon and space from filter
+FILTER_COMPLEX="${FILTER_COMPLEX%; }"
+
+# If no overlays enabled, just re-encode
+if [ -z "$FILTER_COMPLEX" ]; then
+  echo "No overlays enabled, creating copy of input video" >&2
+  eval "ffmpeg -y -i \"$INPUT_FILE\" -t \"${DURATION_FALLBACK}\" -r ${FPS} -c:v libx264 -preset veryfast -c:a copy \"$OUT_VIDEO\" 2>&1 | grep -v \"^frame=\" || true"
 else
-  echo "No emoji overlay (${EMOJI_PNG} not found)" >&2
-  ffmpeg -y -i "$INPUT_FILE" -i "$SCREENSHOT_PNG" -i "$CAPTION_PNG" \
-    -t "${DURATION_FALLBACK}" \
-    -filter_complex "\
-[1:v]scale=${OVERLAY_W_PX}:${OVERLAY_H_PX}[ov]; \
-[0:v][ov]overlay=x=${OV_X_EXPR}:y=${OV_Y_EXPR}:enable='gte(t,${FRAME_DELAY_START})'[step1]; \
-[step1][2:v]overlay=x=(main_w-overlay_w)/2:y=${BAR_OFFSET_Y}" \
-    -r ${FPS} -c:v libx264 -preset veryfast -c:a copy "$OUT_VIDEO" 2>&1 | grep -v "^frame=" || true
+  # Build and execute ffmpeg command with overlays
+  eval "ffmpeg -y $FFMPEG_INPUTS -t \"${DURATION_FALLBACK}\" -filter_complex \"$FILTER_COMPLEX\" -map \"[${CURRENT_STREAM}]\" -map 0:a? -r ${FPS} -c:v libx264 -preset veryfast -c:a copy \"$OUT_VIDEO\" 2>&1 | grep -v \"^frame=\" || true"
 fi
 
 if [ $? -eq 0 ] && [ -f "$OUT_VIDEO" ]; then
-  echo "============================================" >&2
-  echo "SUCCESS: Video created at $OUT_VIDEO" >&2
-  echo "============================================" >&2
-
   # Clean up temporary files
-  echo "Cleaning up temporary files..." >&2
   rm -f "$TMP_FRAME" "$SCREENSHOT_PNG" "$CAPTION_PNG" 2>/dev/null
-  echo "Cleanup complete." >&2
 
-  # print ONLY basename to stdout (for automation)
-  basename "$OUT_VIDEO"
+  # Print complete output file path
+  echo "$OUT_VIDEO"
   exit 0
 else
   echo "ERR: final ffmpeg compose failed" >&2
