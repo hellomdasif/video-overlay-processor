@@ -519,6 +519,53 @@ Feel free to fork, modify, and submit pull requests! Some ideas for contribution
 - Support for custom overlay images
 - Batch processing with config files
 
+## Integration with n8n (Workflow Automation)
+
+The script works perfectly with n8n for automated video processing workflows.
+
+### n8n Execute Command Node
+
+**Command:**
+```bash
+{{ $json.body.root_dir }}script/views/views.sh --output-dir {{ $json.body.root_dir }}script/views/output --rand-min 10 --rand-max 50 --no-screenshot --no-caption --no-emoji {{ $json.body.root_dir }}{{ $json.body.folder }}/{{ $json.body.filename }} {{ $json.body.filename }} 2>&1 | grep -E "^/.*\.mp4$"
+```
+
+**What this does:**
+- Processes video from dynamic input path
+- Saves output to script's output directory
+- Random view count: 10M-50M
+- No overlays (clean re-encode)
+- Returns only the output file path
+
+**Output:**
+```
+/home/node/shared/script/views/output/3RvwZ5Zc294.mp4
+```
+
+**Customize overlays:**
+```bash
+# With all overlays (default behavior)
+{{ $json.body.root_dir }}script/views/views.sh --output-dir {{ $json.body.root_dir }}script/views/output --rand-min 10 --rand-max 50 {{ $json.body.root_dir }}{{ $json.body.folder }}/{{ $json.body.filename }} {{ $json.body.filename }} 2>&1 | grep -E "^/.*\.mp4$"
+
+# Only caption overlay
+{{ $json.body.root_dir }}script/views/views.sh --output-dir {{ $json.body.root_dir }}script/views/output --rand-min 10 --rand-max 50 --no-screenshot --no-emoji --caption-text "[VIEWS] Subscribe!" {{ $json.body.root_dir }}{{ $json.body.folder }}/{{ $json.body.filename }} {{ $json.body.filename }} 2>&1 | grep -E "^/.*\.mp4$"
+
+# Only screenshot overlay
+{{ $json.body.root_dir }}script/views/views.sh --output-dir {{ $json.body.root_dir }}script/views/output --rand-min 10 --rand-max 50 --no-caption --no-emoji {{ $json.body.root_dir }}{{ $json.body.folder }}/{{ $json.body.filename }} {{ $json.body.filename }} 2>&1 | grep -E "^/.*\.mp4$"
+```
+
+**Example n8n Variables:**
+- `$json.body.root_dir` → `/home/node/shared/`
+- `$json.body.folder` → `/YOUTUBE/KnowSparkz`
+- `$json.body.filename` → `3RvwZ5Zc294.mp4`
+
+### Tips for n8n Integration
+
+1. **Use Execute Command node** for running the script
+2. **Add `2>&1 | grep -E "^/.*\.mp4$"`** to get clean output (just the file path)
+3. **Capture the output path** for downstream nodes (upload, move, etc.)
+4. **Handle errors** with n8n's error workflow feature
+
 ## Support
 
 For issues, questions, or feature requests, please open an issue on GitHub.
